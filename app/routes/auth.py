@@ -1,14 +1,17 @@
 from datetime import datetime, timedelta
+import os 
 
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import jwt
 from sqlalchemy.orm import Session
 from pwdlib import PasswordHash
+
 from app.core.database import get_db
 from app.models.user import User
 
-
+load_dotenv()
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"]
@@ -25,7 +28,11 @@ def verify_password(plain_password: str, hashed_password: str):
     return password_hash.verify(plain_password, hashed_password)
 
 # JWT settings
-SECRET_KEY = "change-this-later"
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY is not set in .env")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 

@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models.document import Document
+from app.models.user import User
 from app.services.pdf_service import extract_text_from_pdf
 
 
@@ -16,14 +18,14 @@ router = APIRouter(
 
 
 UPLOAD_DIR = "uploads"
-
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/upload")
 def upload_document(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     # Check file type
     if file.content_type != "application/pdf":
@@ -46,7 +48,7 @@ def upload_document(
 
     # Save document information
     document = Document(
-        user_id=1,
+        user_id=current_user.id,
         filename=file.filename,
         file_path=file_path,
         extracted_text=extracted_text
@@ -60,5 +62,6 @@ def upload_document(
         "message": "PDF uploaded successfully",
         "document_id": document.id,
         "filename": document.filename,
-        "characters_extracted": len(extracted_text)
+        "characters_extracted": len(extracted_text),
+        "user_id": current_user.id
     }
