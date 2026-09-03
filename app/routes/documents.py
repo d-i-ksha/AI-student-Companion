@@ -65,3 +65,20 @@ def upload_document(
         "characters_extracted": len(extracted_text),
         "user_id": current_user.id
     }
+
+@router.get("/")
+def get_documents(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    documents = db.query(Document).filter(
+        Document.user_id == current_user.id
+    ).all()
+
+    return [
+        {
+            "id": document.id,
+            "filename": document.filename
+        }
+        for document in documents
+    ]

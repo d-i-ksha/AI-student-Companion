@@ -7,6 +7,7 @@ from app.models.document import Document
 from app.routes.auth import router as auth_router
 from app.routes.documents import router as document_router
 from app.routes.study import router as study_router
+from app.routes.dashboard import router as dashboard_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,6 +24,8 @@ app.include_router(auth_router)
 app.include_router(document_router)
 
 app.include_router(study_router)
+
+app.include_router(dashboard_router)
 
 @app.get("/")
 def root():
