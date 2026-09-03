@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models.document import Document
+from app.models.user import User
 from app.services.ai_service import (
     generate_summary,
     generate_questions,
@@ -29,11 +31,13 @@ class QuestionRequest(BaseModel):
 @router.post("/{document_id}/summary")
 def create_summary(
     document_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Find document
+    # Find document belonging to the logged-in user
     document = db.query(Document).filter(
-        Document.id == document_id
+        Document.id == document_id,
+        Document.user_id == current_user.id
     ).first()
 
     if not document:
@@ -68,11 +72,13 @@ def create_summary(
 @router.post("/{document_id}/questions")
 def create_questions(
     document_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Find document
+    # Find document belonging to the logged-in user
     document = db.query(Document).filter(
-        Document.id == document_id
+        Document.id == document_id,
+        Document.user_id == current_user.id
     ).first()
 
     if not document:
@@ -107,11 +113,13 @@ def create_questions(
 @router.post("/{document_id}/quiz")
 def create_quiz(
     document_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Find document
+    # Find document belonging to the logged-in user
     document = db.query(Document).filter(
-        Document.id == document_id
+        Document.id == document_id,
+        Document.user_id == current_user.id
     ).first()
 
     if not document:
@@ -147,11 +155,13 @@ def create_quiz(
 def ask_question(
     document_id: int,
     request: QuestionRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Find document
+    # Find document belonging to the logged-in user
     document = db.query(Document).filter(
-        Document.id == document_id
+        Document.id == document_id,
+        Document.user_id == current_user.id
     ).first()
 
     if not document:

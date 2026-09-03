@@ -1,8 +1,8 @@
 import os
+import time
 
 from dotenv import load_dotenv
 from google import genai
-
 
 load_dotenv()
 
@@ -11,11 +11,46 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY is not set")
 
-
 client = genai.Client(api_key=API_KEY)
+
+MODEL = "gemini-3.6-flash"
+
+
+def generate_with_retry(prompt: str, retries: int = 2) -> str:
+    """
+    Send a prompt to Gemini and retry temporary server errors.
+    """
+
+    for attempt in range(retries):
+        try:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt
+            )
+
+            if not response.text:
+                raise RuntimeError("Gemini returned an empty response")
+
+            return response.text
+
+        except Exception as e:
+            error_message = str(e)
+
+            # Retry temporary Gemini server errors
+            if "503" in error_message or "UNAVAILABLE" in error_message:
+                if attempt < retries - 1:
+                    wait_time = 2 ** attempt
+                    print("Gemini temporarily unavailable. Retrying...")
+                    time.sleep(1)
+                    continue
+
+            raise e
+
+    raise RuntimeError("Gemini request failed after multiple attempts")
 
 
 def generate_summary(text: str) -> str:
+
     prompt = f"""
 You are an AI study assistant.
 
@@ -33,45 +68,28 @@ STUDY MATERIAL:
 {text}
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt
-    )
-
-    return response.text
+    return generate_with_retry(prompt)
 
 
-def generate_questions(text: str) -> list[str]:
+def generate_questions(text: str) -> str:
+
     prompt = f"""
-You are an AI study assistant.
+Generate 3 short study questions from these notes.
+Return only the questions.
 
-Generate 10 useful study questions from the following study material.
-
-Requirements:
-- Questions must be based ONLY on the provided material.
-- Mix easy, medium, and difficult questions.
-- Focus on important concepts.
-- Do not provide answers.
-- Return ONLY the questions as a numbered list.
-
-STUDY MATERIAL:
-
-{text}
+NOTES:
+{text[:5000]}
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt
-    )
+    return generate_with_retry(prompt)
 
-    return response.text
 
 def generate_quiz(text: str) -> str:
+
     prompt = f"""
 You are an AI study assistant.
 
-Create a 10-question multiple-choice quiz from the following
-study material.
+Create a 10-question multiple-choice quiz from the following study material.
 
 Requirements:
 - Questions must be based ONLY on the provided material.
@@ -84,10 +102,12 @@ Requirements:
 Use this format:
 
 1. Question
+
 A. Option
 B. Option
 C. Option
 D. Option
+
 Correct Answer: A
 
 STUDY MATERIAL:
@@ -95,14 +115,11 @@ STUDY MATERIAL:
 {text}
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt
-    )
+    return generate_with_retry(prompt)
 
-    return response.text
 
 def answer_question(text: str, question: str) -> str:
+
     prompt = f"""
 You are an AI study assistant.
 
@@ -116,15 +133,12 @@ Rules:
 - Do not invent information.
 
 STUDY MATERIAL:
+
 {text}
 
 STUDENT QUESTION:
+
 {question}
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt
-    )
-
-    return response.text
+    return generate_with_retry(prompt)
