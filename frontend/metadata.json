@@ -1,0 +1,6 @@
+{
+  "name": "AI Student Companion",
+  "description": "A focused student study application for uploading PDF study notes, generating AI summaries, study questions, interactive quizzes, and grounded AI question-answering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
