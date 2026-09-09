@@ -1,5 +1,6 @@
 import os
 import time
+import json
 
 from dotenv import load_dotenv
 from google import genai
@@ -29,34 +30,62 @@ def generate_with_retry(prompt: str, retries: int = 2) -> str:
             )
 
             if not response.text:
-                raise RuntimeError("Gemini returned an empty response")
+                raise RuntimeError(
+                    "Gemini returned an empty response"
+                )
 
             return response.text
 
         except Exception as e:
             error_message = str(e)
 
-            # Retry temporary Gemini server errors
             if "503" in error_message or "UNAVAILABLE" in error_message:
                 if attempt < retries - 1:
                     wait_time = 2 ** attempt
-                    print("Gemini temporarily unavailable. Retrying...")
-                    time.sleep(1)
+
+                    print(
+                        "Gemini temporarily unavailable. "
+                        "Retrying..."
+                    )
+
+                    time.sleep(wait_time)
                     continue
 
             raise e
 
-    raise RuntimeError("Gemini request failed after multiple attempts")
+    raise RuntimeError(
+        "Gemini request failed after multiple attempts"
+    )
+
+
+def clean_json_response(raw_text: str) -> str:
+    """
+    Remove Markdown code fences if Gemini returns JSON
+    inside ```json ... ``` blocks.
+    """
+
+    cleaned = raw_text.strip()
+
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+
+    elif cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+
+    return cleaned.strip()
 
 
 def generate_summary(text: str) -> str:
-
     prompt = f"""
 You are an AI study assistant.
 
 Summarize the following study material for a college student.
 
 Requirements:
+
 - Give a clear overall summary.
 - Identify the most important concepts.
 - Use simple language.
@@ -71,65 +100,190 @@ STUDY MATERIAL:
     return generate_with_retry(prompt)
 
 
-def generate_questions(text: str) -> str:
+def generate_questions(text: str) -> list:
+    """
+    Generate structured study questions.
+    """
 
-    prompt = f"""
-Generate 3 short study questions from these notes.
-Return only the questions.
-
-NOTES:
-{text[:5000]}
-"""
-
-    return generate_with_retry(prompt)
-
-
-def generate_quiz(text: str) -> str:
+    print("=== QUESTIONS TEXT ===")
+    print(text[:1000])
+    print("======================")
 
     prompt = f"""
 You are an AI study assistant.
 
-Create a 10-question multiple-choice quiz from the following study material.
+Generate exactly 3 short study questions from the
+provided study material.
 
-Requirements:
+Return ONLY valid JSON.
+
+Do not include Markdown.
+Do not include ```json.
+Do not include explanations outside the JSON.
+
+Use exactly this format:
+
+[
+  {{
+    "id": 1,
+    "question": "Question here",
+    "answer": "Answer here"
+  }},
+  {{
+    "id": 2,
+    "question": "Question here",
+    "answer": "Answer here"
+  }},
+  {{
+    "id": 3,
+    "question": "Question here",
+    "answer": "Answer here"
+  }}
+]
+
+Rules:
+
 - Questions must be based ONLY on the provided material.
-- Each question must have exactly 4 options: A, B, C, D.
-- Include the correct answer.
-- Mix easy, medium, and difficult questions.
+- Answers must be based ONLY on the provided material.
+- Do not invent information.
+- Keep questions concise.
+
+STUDY MATERIAL:
+
+{text[:5000]}
+"""
+
+    raw_response = generate_with_retry(prompt)
+    cleaned_response = clean_json_response(raw_response)
+
+    try:
+        questions = json.loads(cleaned_response)
+
+        if not isinstance(questions, list):
+            raise ValueError("Gemini did not return a JSON list")
+
+        return questions
+
+    except json.JSONDecodeError as e:
+        print("Failed to parse questions JSON:")
+        print(raw_response)
+
+        raise RuntimeError(
+            "Gemini returned invalid question format"
+        ) from e
+
+
+def generate_quiz(text: str) -> list:
+    """
+    Generate a structured 10-question multiple-choice quiz.
+    """
+
+    print("=== QUIZ TEXT ===")
+    print(text[:1000])
+    print("================")
+
+    prompt = f"""
+You are an AI study assistant.
+
+Create a 10-question multiple-choice quiz from the
+following study material.
+
+Return ONLY valid JSON.
+
+Do not include Markdown.
+Do not include ```json.
+Do not include explanations outside the JSON.
+
+Use exactly this structure:
+
+[
+  {{
+    "id": 1,
+    "question": "Question here",
+    "options": [
+      {{
+        "key": "A",
+        "text": "Option A"
+      }},
+      {{
+        "key": "B",
+        "text": "Option B"
+      }},
+      {{
+        "key": "C",
+        "text": "Option C"
+      }},
+      {{
+        "key": "D",
+        "text": "Option D"
+      }}
+    ],
+    "correctKey": "A",
+    "explanation": "Short explanation."
+  }}
+]
+
+Rules:
+
+- Generate exactly 10 questions.
+- Each question must have exactly 4 options.
+- Options must be A, B, C and D.
+- There must be exactly one correct answer.
+- correctKey must be exactly A, B, C or D.
+- Questions must be based ONLY on the provided study material.
+- Do not use outside information.
+- Do not invent facts.
+- Mix easy, medium and difficult questions.
 - Focus on important concepts.
-- Format clearly.
-
-Use this format:
-
-1. Question
-
-A. Option
-B. Option
-C. Option
-D. Option
-
-Correct Answer: A
+- Keep explanations short and clear.
 
 STUDY MATERIAL:
 
 {text}
 """
 
-    return generate_with_retry(prompt)
+    raw_response = generate_with_retry(prompt)
+    cleaned_response = clean_json_response(raw_response)
+
+    try:
+        quiz = json.loads(cleaned_response)
+
+        if not isinstance(quiz, list):
+            raise ValueError("Gemini did not return a JSON list")
+
+        if len(quiz) == 0:
+            raise ValueError("Gemini returned an empty quiz")
+
+        return quiz
+
+    except json.JSONDecodeError as e:
+        print("Failed to parse quiz JSON:")
+        print(raw_response)
+
+        raise RuntimeError(
+            "Gemini returned invalid quiz format"
+        ) from e
 
 
 def answer_question(text: str, question: str) -> str:
+    print("=== ASK AI TEXT ===")
+    print(text[:1000])
+    print("===================")
 
     prompt = f"""
 You are an AI study assistant.
 
-Answer the student's question using ONLY the provided study material.
+Answer the student's question using ONLY the provided
+study material.
 
 Rules:
+
 - Use the study material as your primary and only source.
 - Explain the answer clearly and simply.
 - If the answer cannot be found in the study material, say:
-  "This topic is not covered in the uploaded notes."
+
+"This topic is not covered in the uploaded notes."
+
 - Do not invent information.
 
 STUDY MATERIAL:
